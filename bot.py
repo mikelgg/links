@@ -21,17 +21,11 @@ logging.getLogger('telegram').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# Tokens directamente en el código
+# Tokens y códigos
 TOKEN = "7912304550:AAHvWRVO3j4lwOUcD7soyyGxv8bsFFUwUdY"
 MONITOR_GROUP_ID = "-1002429457610"
-
-# Verificar token al inicio
-if not TOKEN:
-    logger.error("No se encontró el token del bot.")
-    sys.exit(1)
-
-logger.info(f"Token encontrado: {TOKEN[:5]}...{TOKEN[-5:]}")
-logger.info(f"Monitor ID configurado: {MONITOR_GROUP_ID}")
+OOTDBUY_INVITE = "K3YUN0O7N"
+WEMIMI_ID = "1700341715280059890"
 
 async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: str):
     """Envía una copia del mensaje al grupo de monitoreo"""
@@ -43,6 +37,26 @@ async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: s
             )
         except Exception as e:
             print(f"Error al enviar al monitor: {e}")
+
+def generate_links(product_url, item_id):
+    """Genera todos los enlaces necesarios"""
+    # Codificar URL para Wemimi y Sugargoo
+    encoded_url = requests.utils.quote(product_url)
+    double_encoded_url = requests.utils.quote(encoded_url)  # Para Wemimi
+
+    # Determinar el canal para OOTDBUY
+    if "weidian.com" in product_url:
+        channel = "weidian"
+    elif "taobao.com" in product_url:
+        channel = "TAOBAO"
+    else:  # 1688.com
+        channel = "1688"
+
+    return {
+        'ootdbuy': f"https://www.ootdbuy.com/goods/details?id={item_id}&channel={channel}&inviteCode={OOTDBUY_INVITE}",
+        'wemimi': f"https://www.wemimi.com/#/home/productDetail?productLink={double_encoded_url}&memberId={WEMIMI_ID}",
+        'sugargoo': f"https://www.sugargoo.com/#/home/productDetail?productLink={encoded_url}"
+    }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -60,105 +74,77 @@ async def process_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     print("Recibido mensaje:", message.text)
-    
-    # Monitorear el mensaje recibido
     await forward_to_monitor(context, message.text)
     
     # Separar el mensaje en líneas
     lines = message.text.split('\n')
-    if len(lines) != 3:
+    
+    # Procesar según el número de líneas
+    if len(lines) == 3:  # Formato original: título, imagen, sugargoo
+        title, image_url, product_url = lines
+    elif len(lines) == 2:  # Nuevo formato: título, enlace directo
+        title, product_url = lines
+        image_url = None
+    else:
         await message.reply_text(
-            "Por favor, usa el siguiente formato:\n"
-            "título\n"
-            "URL de la imagen\n"
-            "enlace de sugargoo"
+            "Por favor, usa uno de estos formatos:\n\n"
+            "1. título\nURL de la imagen\nenlace de sugargoo\n\n"
+            "2. título\nenlace directo de 1688/weidian/taobao"
         )
         return
-    
-    title, image_url, sugargoo_url = lines
-    
-    # Verificar si es un enlace de SugarGoo
-    if "sugargoo.com" not in sugargoo_url:
-        print("URL no válida de SugarGoo")
-        await message.reply_text("El tercer enlace debe ser de SugarGoo.")
-        return
-    
+
     try:
-        # Extraer la URL original del producto
-        product_link_match = re.search(r'productLink=(.*?)(?:&|$)', sugargoo_url)
-        if not product_link_match:
-            raise ValueError("No se pudo encontrar el enlace del producto")
-            
-        product_url = requests.utils.unquote(product_link_match.group(1))
-        print("URL del producto:", product_url)
+        # Si es un enlace de Sugargoo, extraer el enlace original
+        if "sugargoo.com" in product_url:
+            product_link_match = re.search(r'productLink=(.*?)(?:&|$)', product_url)
+            if not product_link_match:
+                raise ValueError("No se pudo encontrar el enlace del producto")
+            product_url = requests.utils.unquote(product_link_match.group(1))
         
         # Obtener el ID del producto
         item_id = extract_item_id(product_url)
         if not item_id:
             raise ValueError("No se pudo extraer el ID del producto")
-            
-        # Generar enlaces alternativos según la plataforma
-        encoded_product_url = requests.utils.quote(product_url)
-        wemimi_link = f"https://www.wemimi.com/#/home/productDetail?productLink={encoded_product_url}&memberId=1700341715280059890"
         
-        # Determinar el canal según la URL
-        if "weidian.com" in product_url:
-            ootdbuy_link = f"https://www.ootdbuy.com/goods/details?id={item_id}&channel=weidian&inviteCode=IVA6HF6CN"
-        elif "taobao.com" in product_url:
-            ootdbuy_link = f"https://www.ootdbuy.com/goods/details?id={item_id}&channel=TAOBAO&inviteCode=IVA6HF6CN"
-        else:  # 1688.com
-            ootdbuy_link = f"https://www.ootdbuy.com/goods/details?id={item_id}&channel=1688&inviteCode=IVA6HF6CN"
+        # Generar todos los enlaces
+        links = generate_links(product_url, item_id)
         
-        try:
-            await message.reply_photo(
-                photo=image_url,
-                caption=f"{title}\n\n"
-                        f"<a href='{ootdbuy_link}'>OOTDBUY</a> | "
-                        f"<a href='{wemimi_link}'>WEMIMI</a> | "
-                        f"<a href='{sugargoo_url}'>SUGARGOO</a>",
-                parse_mode='HTML'
-            )
-        except Exception as e:
-            print(f"Error al enviar imagen: {e}")
-            await message.reply_text(
-                f"{title}\n\n"
-                f"<a href='{ootdbuy_link}'>OOTDBUY</a> | "
-                f"<a href='{wemimi_link}'>WEMIMI</a> | "
-                f"<a href='{sugargoo_url}'>SUGARGOO</a>",
-                parse_mode='HTML'
-            )
-    
-    except requests.RequestException as e:
-        await message.reply_text("Error al acceder al enlace. Por favor, verifica que el enlace sea válido.")
-        print(f"Error de solicitud: {e}")
-    except ValueError as e:
-        await message.reply_text(f"Error al procesar el producto: {str(e)}")
-        print(f"Error de valor: {e}")
+        # Preparar el mensaje con los enlaces en negrita
+        message_text = f"{title} 🔥\n"
+        message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
+        message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
+        message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
+
+        if image_url:
+            try:
+                await message.reply_photo(
+                    photo=image_url,
+                    caption=message_text,
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                print(f"Error al enviar imagen: {e}")
+                await message.reply_text(message_text, parse_mode='HTML')
+        else:
+            await message.reply_text(message_text, parse_mode='HTML')
+
     except Exception as e:
-        await message.reply_text("Lo siento, ocurrió un error inesperado.")
-        print(f"Error inesperado: {e}")
+        await message.reply_text(f"Error al procesar el enlace: {str(e)}")
+        print(f"Error: {e}")
 
 def extract_item_id(url):
     """Extraer el ID del producto de diferentes plataformas"""
     if "1688.com" in url:
-        # Para enlaces de 1688.com
         pattern = r'offer/(\d+)\.html'
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
     elif "weidian.com" in url:
-        # Para enlaces de Weidian
         pattern = r'itemID=(\d+)'
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
     elif "taobao.com" in url:
-        # Para enlaces de Taobao
         pattern = r'id=(\d+)'
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
-    return None
+    else:
+        return None
+
+    match = re.search(pattern, url)
+    return match.group(1) if match else None
 
 def main():
     try:
