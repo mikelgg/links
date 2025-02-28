@@ -169,6 +169,18 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
     chat_id = message.chat_id
     text = message.text.strip()
     
+    # Verificar si quiere cancelar el proceso
+    if text.lower() in ["cancelar", "cancel", "stop", "parar", "detener"]:
+        if chat_id in canal_estado:
+            del canal_estado[chat_id]
+        if chat_id in canal_datos:
+            del canal_datos[chat_id]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text="Proceso cancelado. Puedes iniciar uno nuevo escribiendo 'iniciar'."
+        )
+        return
+    
     # Iniciar proceso en el canal
     if text.lower() in ["iniciar", "crear", "nuevo", "/iniciar", "/crear", "/nuevo"]:
         canal_estado[chat_id] = "TITULO"
@@ -191,7 +203,7 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
         canal_estado[chat_id] = "IMAGEN"
         await context.bot.send_message(
             chat_id=chat_id,
-            text="Título guardado. Ahora envía el enlace de la imagen:"
+            text="Título guardado. Ahora envía el enlace de la imagen: (o escribe 'cancelar' para detener el proceso)"
         )
     
     elif estado == "IMAGEN":
@@ -201,7 +213,7 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             canal_estado[chat_id] = "ENLACE"
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="Imagen omitida. Por último, envía el enlace de Sugargoo o el enlace directo:"
+                text="Imagen omitida. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)"
             )
         # Verificar si es una URL de imgur sin http/https
         elif "imgur.com" in text or "i.imgur.com" in text:
@@ -215,7 +227,7 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             canal_estado[chat_id] = "ENLACE"
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo:"
+                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)"
             )
         # Verificar si es una URL de imagen válida (incluyendo otras plataformas)
         elif (text.startswith("http") and 
@@ -227,13 +239,13 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             canal_estado[chat_id] = "ENLACE"
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo:"
+                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)"
             )
         else:
             # Si no parece una URL de imagen, preguntar de nuevo
             await context.bot.send_message(
                 chat_id=chat_id,
-                text="No parece una URL de imagen válida. Puedes enviar una URL de imgur (como i.imgur.com/ejemplo.jpg) o escribe 'saltar' para omitir este paso:"
+                text="No parece una URL de imagen válida. Puedes enviar una URL de imgur (como i.imgur.com/ejemplo.jpg), escribir 'saltar' para omitir este paso, o 'cancelar' para detener todo el proceso:"
             )
     
     elif estado == "ENLACE":
