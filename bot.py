@@ -21,20 +21,13 @@ logging.getLogger('telegram').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
-# Imprimir todas las variables de entorno (sin valores sensibles)
-logger.info("Variables de entorno disponibles:")
-for key in os.environ:
-    logger.info(f"Variable encontrada: {key}")
-
 # Tokens directamente en el código
 TOKEN = "7912304550:AAHvWRVO3j4lwOUcD7soyyGxv8bsFFUwUdY"
 MONITOR_GROUP_ID = "-1002429457610"
 
 # Verificar token al inicio
 if not TOKEN:
-    logger.error("No se encontró el token del bot. Variables disponibles:")
-    for key in os.environ:
-        logger.error(f"- {key}")
+    logger.error("No se encontró el token del bot.")
     sys.exit(1)
 
 logger.info(f"Token encontrado: {TOKEN[:5]}...{TOKEN[-5:]}")
@@ -108,10 +101,12 @@ async def process_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         encoded_product_url = requests.utils.quote(product_url)
         wemimi_link = f"https://www.wemimi.com/#/home/productDetail?productLink={encoded_product_url}&memberId=1700341715280059890"
         
-        # Para Weidian usamos un formato diferente en OOTDBUY
+        # Determinar el canal según la URL
         if "weidian.com" in product_url:
             ootdbuy_link = f"https://www.ootdbuy.com/goods/details?id={item_id}&channel=weidian&inviteCode=IVA6HF6CN"
-        else:
+        elif "taobao.com" in product_url:
+            ootdbuy_link = f"https://www.ootdbuy.com/goods/details?id={item_id}&channel=TAOBAO&inviteCode=IVA6HF6CN"
+        else:  # 1688.com
             ootdbuy_link = f"https://www.ootdbuy.com/goods/details?id={item_id}&channel=1688&inviteCode=IVA6HF6CN"
         
         try:
@@ -144,7 +139,7 @@ async def process_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"Error inesperado: {e}")
 
 def extract_item_id(url):
-    # Extraer el ID del producto de diferentes plataformas
+    """Extraer el ID del producto de diferentes plataformas"""
     if "1688.com" in url:
         # Para enlaces de 1688.com
         pattern = r'offer/(\d+)\.html'
@@ -154,6 +149,12 @@ def extract_item_id(url):
     elif "weidian.com" in url:
         # Para enlaces de Weidian
         pattern = r'itemID=(\d+)'
+        match = re.search(pattern, url)
+        if match:
+            return match.group(1)
+    elif "taobao.com" in url:
+        # Para enlaces de Taobao
+        pattern = r'id=(\d+)'
         match = re.search(pattern, url)
         if match:
             return match.group(1)
