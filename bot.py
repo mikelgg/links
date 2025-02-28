@@ -21,9 +21,9 @@ logger.info("Variables de entorno disponibles:")
 for key in os.environ:
     logger.info(f"Variable encontrada: {key}")
 
-# Obtener el token y el ID del grupo desde las variables de entorno
-TOKEN = os.environ.get('BOT_TOKEN')  # Cambiado de os.getenv a os.environ.get
-MONITOR_GROUP_ID = os.environ.get('MONITOR_GROUP_ID')
+# Tokens directamente en el código
+TOKEN = "7912304550:AAHvWRVO3j4lwOUcD7soyyGxv8bsFFUwUdY"
+MONITOR_GROUP_ID = "-1002429457610"
 
 # Verificar token al inicio
 if not TOKEN:
