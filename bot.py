@@ -35,17 +35,16 @@ if not TOKEN:
 logger.info(f"Token encontrado: {TOKEN[:5]}...{TOKEN[-5:]}")
 logger.info(f"Monitor ID configurado: {MONITOR_GROUP_ID}")
 
-async def forward_to_monitor(update: Update, message_text: str):
+async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: str):
     """Envía una copia del mensaje al grupo de monitoreo"""
     if MONITOR_GROUP_ID:
-        context = Application.get_current()
         try:
             await context.bot.send_message(
                 chat_id=MONITOR_GROUP_ID,
                 text=f"💬 Nuevo mensaje:\n{message_text}"
             )
         except Exception as e:
-            logger.error(f"Error al enviar al monitor: {e}")
+            print(f"Error al enviar al monitor: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -54,7 +53,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Envíame un enlace de SugarGoo y te generaré enlaces alternativos."
     )
     # Monitorear el comando start
-    await forward_to_monitor(update, "Usó el comando /start")
+    await forward_to_monitor(context, "Usó el comando /start")
 
 async def process_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message or update.channel_post
@@ -65,7 +64,7 @@ async def process_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Recibido mensaje:", message.text)
     
     # Monitorear el mensaje recibido
-    await forward_to_monitor(update, message.text)
+    await forward_to_monitor(context, message.text)
     
     # Separar el mensaje en líneas
     lines = message.text.split('\n')
