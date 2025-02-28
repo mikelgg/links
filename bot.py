@@ -4,11 +4,41 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 import requests
 from bs4 import BeautifulSoup
 import re
+import os
+import logging
+
+# Configurar logging
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+
+# Obtener el token y el ID del grupo desde las variables de entorno
+TOKEN = os.getenv('BOT_TOKEN')
+MONITOR_GROUP_ID = os.getenv('MONITOR_GROUP_ID')  # Añadir esta variable en Railway
+
+async def forward_to_monitor(update: Update, message_text: str):
+    """Envía una copia del mensaje al grupo de monitoreo"""
+    if MONITOR_GROUP_ID:
+        user = update.effective_user
+        monitor_message = (
+            f"👤 Usuario: {user.first_name} ({user.id})\n"
+            f"💬 Mensaje:\n{message_text}"
+        )
+        context = Application.get_current()
+        await context.bot.send_message(
+            chat_id=MONITOR_GROUP_ID,
+            text=monitor_message
+        )
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
     await update.message.reply_text(
-        "¡Hola! Envíame un enlace de SugarGoo y te generaré enlaces alternativos."
+        f"¡Hola! Este es el ID del chat: {chat_id}\n"
+        "Envíame un enlace de SugarGoo y te generaré enlaces alternativos."
     )
+    # Monitorear el comando start
+    await forward_to_monitor(update, "Usó el comando /start")
 
 async def process_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message or update.channel_post
@@ -17,6 +47,9 @@ async def process_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
         
     print("Recibido mensaje:", message.text)
+    
+    # Monitorear el mensaje recibido
+    await forward_to_monitor(update, f"Procesando enlace:\n{message.text}")
     
     # Separar el mensaje en líneas
     lines = message.text.split('\n')
@@ -107,14 +140,15 @@ def extract_item_id(url):
     return None
 
 def main():
-    # Reemplaza 'TU_TOKEN' con el token de tu bot
-    application = Application.builder().token('7912304550:AAHvWRVO3j4lwOUcD7soyyGxv8bsFFUwUdY').build()
+    # Usar el token desde las variables de entorno
+    application = Application.builder().token(TOKEN).build()
     
     # Manejadores
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, process_link))
     
     # Iniciar el bot
+    print("Bot iniciado...")
     application.run_polling()
 
 if __name__ == '__main__':
