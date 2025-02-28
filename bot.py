@@ -8,11 +8,16 @@ import os
 import logging
 import sys
 
-# Configurar logging más detallado
+# Configurar logging solo para información importante
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.DEBUG
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    level=logging.INFO
 )
+
+# Desactivar logs de httpx y otros módulos
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
+logging.getLogger('telegram').setLevel(logging.WARNING)
 
 logger = logging.getLogger(__name__)
 
