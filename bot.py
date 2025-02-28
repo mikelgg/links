@@ -22,7 +22,8 @@ async def forward_to_monitor(update: Update, message_text: str):
     if MONITOR_GROUP_ID:
         user = update.effective_user
         monitor_message = (
-            f"👤 Usuario: {user.first_name} ({user.id})\n"
+            f"👤 Usuario: {user.first_name if user else 'Canal'} "
+            f"({user.id if user else 'N/A'})\n"
             f"💬 Mensaje:\n{message_text}"
         )
         context = Application.get_current()
