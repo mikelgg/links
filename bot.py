@@ -15,22 +15,19 @@ logging.basicConfig(
 
 # Obtener el token y el ID del grupo desde las variables de entorno
 TOKEN = os.getenv('BOT_TOKEN')
-MONITOR_GROUP_ID = os.getenv('MONITOR_GROUP_ID')  # Añadir esta variable en Railway
+MONITOR_GROUP_ID = os.getenv('MONITOR_GROUP_ID')
 
 async def forward_to_monitor(update: Update, message_text: str):
     """Envía una copia del mensaje al grupo de monitoreo"""
     if MONITOR_GROUP_ID:
-        user = update.effective_user
-        monitor_message = (
-            f"👤 Usuario: {user.first_name if user else 'Canal'} "
-            f"({user.id if user else 'N/A'})\n"
-            f"💬 Mensaje:\n{message_text}"
-        )
         context = Application.get_current()
-        await context.bot.send_message(
-            chat_id=MONITOR_GROUP_ID,
-            text=monitor_message
-        )
+        try:
+            await context.bot.send_message(
+                chat_id=MONITOR_GROUP_ID,
+                text=f"💬 Nuevo mensaje:\n{message_text}"
+            )
+        except Exception as e:
+            print(f"Error al enviar al monitor: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
@@ -50,7 +47,7 @@ async def process_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("Recibido mensaje:", message.text)
     
     # Monitorear el mensaje recibido
-    await forward_to_monitor(update, f"Procesando enlace:\n{message.text}")
+    await forward_to_monitor(update, message.text)
     
     # Separar el mensaje en líneas
     lines = message.text.split('\n')
