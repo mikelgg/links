@@ -11,21 +11,28 @@ import sys
 # Configurar logging más detallado
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.DEBUG  # Cambiado a DEBUG para más detalles
+    level=logging.DEBUG
 )
 
 logger = logging.getLogger(__name__)
 
+# Imprimir todas las variables de entorno (sin valores sensibles)
+logger.info("Variables de entorno disponibles:")
+for key in os.environ:
+    logger.info(f"Variable encontrada: {key}")
+
 # Obtener el token y el ID del grupo desde las variables de entorno
-TOKEN = os.getenv('BOT_TOKEN')
-MONITOR_GROUP_ID = os.getenv('MONITOR_GROUP_ID')
+TOKEN = os.environ.get('BOT_TOKEN')  # Cambiado de os.getenv a os.environ.get
+MONITOR_GROUP_ID = os.environ.get('MONITOR_GROUP_ID')
 
 # Verificar token al inicio
 if not TOKEN:
-    logger.error("No se encontró el token del bot. Asegúrate de configurar BOT_TOKEN en las variables de entorno.")
+    logger.error("No se encontró el token del bot. Variables disponibles:")
+    for key in os.environ:
+        logger.error(f"- {key}")
     sys.exit(1)
 
-logger.info(f"Token encontrado: {TOKEN[:5]}...{TOKEN[-5:]}")  # Solo mostrar principio y final del token
+logger.info(f"Token encontrado: {TOKEN[:5]}...{TOKEN[-5:]}")
 logger.info(f"Monitor ID configurado: {MONITOR_GROUP_ID}")
 
 async def forward_to_monitor(update: Update, message_text: str):
