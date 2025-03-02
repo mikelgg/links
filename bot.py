@@ -34,8 +34,9 @@ datos_temporales = {}
 canal_estado = {}  # Para almacenar el estado actual del canal
 canal_datos = {}   # Para almacenar datos temporales del canal
 
-async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: str, extra_info=None):
-    """Envía información al grupo monitor con datos adicionales si se proporcionan"""
+async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: str, extra_info=None, 
+                        photo=None, document=None, video=None, audio=None, voice=None, sticker=None):
+    """Envía información al grupo monitor con datos adicionales y/o archivos si se proporcionan"""
     if MONITOR_GROUP_ID:
         try:
             # Si hay información extra, añadirla al mensaje
@@ -43,12 +44,62 @@ async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: s
                 monitor_text = f"{message_text}\n\n<i>Info adicional:</i>\n{extra_info}"
             else:
                 monitor_text = message_text
-                
-            await context.bot.send_message(
-                chat_id=MONITOR_GROUP_ID,
-                text=monitor_text,
-                parse_mode='HTML'
-            )
+            
+            # Enviar el tipo de contenido apropiado
+            if photo:
+                await context.bot.send_photo(
+                    chat_id=MONITOR_GROUP_ID,
+                    photo=photo,
+                    caption=monitor_text,
+                    parse_mode='HTML'
+                )
+            elif document:
+                await context.bot.send_document(
+                    chat_id=MONITOR_GROUP_ID,
+                    document=document,
+                    caption=monitor_text,
+                    parse_mode='HTML'
+                )
+            elif video:
+                await context.bot.send_video(
+                    chat_id=MONITOR_GROUP_ID,
+                    video=video,
+                    caption=monitor_text,
+                    parse_mode='HTML'
+                )
+            elif audio:
+                await context.bot.send_audio(
+                    chat_id=MONITOR_GROUP_ID,
+                    audio=audio,
+                    caption=monitor_text,
+                    parse_mode='HTML'
+                )
+            elif voice:
+                await context.bot.send_voice(
+                    chat_id=MONITOR_GROUP_ID,
+                    voice=voice,
+                    caption=monitor_text,
+                    parse_mode='HTML'
+                )
+            elif sticker:
+                # Primero enviar el mensaje de texto
+                await context.bot.send_message(
+                    chat_id=MONITOR_GROUP_ID,
+                    text=monitor_text,
+                    parse_mode='HTML'
+                )
+                # Luego enviar el sticker (los stickers no admiten caption)
+                await context.bot.send_sticker(
+                    chat_id=MONITOR_GROUP_ID,
+                    sticker=sticker
+                )
+            else:
+                # Mensaje de texto normal
+                await context.bot.send_message(
+                    chat_id=MONITOR_GROUP_ID,
+                    text=monitor_text,
+                    parse_mode='HTML'
+                )
         except Exception as e:
             logger.warning(f"Error al enviar al monitor: {e}")
 
@@ -178,31 +229,88 @@ def extract_item_id(url):
 
 async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.channel_post
-    if not message or not message.text:
+    if not message:
         return
     
     chat_id = message.chat_id
-    text = message.text.strip()
     
-    # Verificar si quiere cancelar el proceso
-    if text.lower() in ["cancelar", "cancel", "stop", "parar", "detener"]:
-        if chat_id in canal_estado:
-            del canal_estado[chat_id]
-        if chat_id in canal_datos:
-            del canal_datos[chat_id]
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="Proceso cancelado. Puedes iniciar uno nuevo escribiendo 'iniciar'."
-        )
-        return
+    # Determinar el tipo de contenido
+    content_type = "desconocido"
+    content_data = None
     
-    # Iniciar proceso en el canal
-    if text.lower() in ["iniciar", "crear", "nuevo", "/iniciar", "/crear", "/nuevo"]:
-        canal_estado[chat_id] = "TITULO"
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="Por favor, envía el título del producto:"
-        )
+    if message.text:
+        content_type = "texto"
+        content_data = message.text.strip()
+        
+        # Verificar si quiere cancelar el proceso (solo para mensajes de texto)
+        if content_data.lower() in ["cancelar", "cancel", "stop", "parar", "detener"]:
+            if chat_id in canal_estado:
+                del canal_estado[chat_id]
+            if chat_id in canal_datos:
+                del canal_datos[chat_id]
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text="Proceso cancelado. Puedes iniciar uno nuevo escribiendo 'iniciar'."
+            )
+            return
+        
+        # Iniciar proceso en el canal (solo para mensajes de texto)
+        if content_data.lower() in ["iniciar", "crear", "nuevo", "/iniciar", "/crear", "/nuevo"]:
+            # Inicializar estado y datos
+            canal_estado[chat_id] = "TITULO"
+            canal_datos[chat_id] = {
+                "mensajes_a_eliminar": []
+            }
+            
+            # Enviar mensaje de instrucciones
+            response = await context.bot.send_message(
+                chat_id=chat_id,
+                text="🔄 <b>Proceso iniciado</b>\n\nPor favor, envía el título del producto:",
+                parse_mode='HTML'
+            )
+            
+            # Guardar ID del mensaje para eliminarlo después
+            canal_datos[chat_id]["mensajes_a_eliminar"].append(response.message_id)
+            return
+    elif message.photo:
+        content_type = "foto"
+        content_data = message.photo[-1].file_id
+        caption = message.caption
+        
+        # Si hay un caption, procesarlo como texto adicional
+        if caption and chat_id in canal_estado:
+            if canal_estado[chat_id] == "IMAGEN":
+                # Si estamos esperando una imagen, usar esta foto
+                canal_datos[chat_id]["imagen"] = content_data
+                canal_estado[chat_id] = "ENLACE"
+                
+                # Enviar mensaje pidiendo el enlace
+                response = await context.bot.send_message(
+                    chat_id=chat_id,
+                    text="✅ Imagen recibida.\n\nAhora envía el enlace del producto:",
+                    parse_mode='HTML'
+                )
+                
+                # Guardar ID del mensaje para eliminarlo después
+                canal_datos[chat_id]["mensajes_a_eliminar"].append(response.message_id)
+                return
+    elif message.document:
+        content_type = "documento"
+        content_data = message.document.file_id
+    elif message.video:
+        content_type = "video"
+        content_data = message.video.file_id
+    elif message.audio:
+        content_type = "audio"
+        content_data = message.audio.file_id
+    elif message.voice:
+        content_type = "voz"
+        content_data = message.voice.file_id
+    elif message.sticker:
+        content_type = "sticker"
+        content_data = message.sticker.file_id
+    else:
+        # Otro tipo de contenido no manejado específicamente
         return
     
     # Si no hay un estado activo para este canal, ignorar el mensaje
@@ -214,59 +322,80 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
     
     if estado == "TITULO":
         # Guardar título y pedir imagen
-        canal_datos[chat_id] = {"titulo": text}
+        canal_datos[chat_id]["titulo"] = content_data
         canal_estado[chat_id] = "IMAGEN"
-        await context.bot.send_message(
+        
+        # Enviar mensaje y guardar su ID
+        img_msg = await context.bot.send_message(
             chat_id=chat_id,
-            text="Título guardado. Ahora envía el enlace de la imagen: (o escribe 'cancelar' para detener el proceso)"
+            text="Título guardado. Ahora envía el enlace de la imagen: (o escribe 'cancelar' para detener el proceso)",
+            message_thread_id=message.message_thread_id
         )
+        canal_datos[chat_id]["mensajes_a_eliminar"].append(img_msg.message_id)
     
     elif estado == "IMAGEN":
         # Verificar si quiere saltar la imagen
-        if text.lower() in ["saltar", "skip", "no", "ninguna"]:
+        if content_data.lower() in ["saltar", "skip", "no", "ninguna"]:
             canal_datos[chat_id]["imagen"] = ""
             canal_estado[chat_id] = "ENLACE"
-            await context.bot.send_message(
+            
+            # Enviar mensaje y guardar su ID
+            enlace_msg = await context.bot.send_message(
                 chat_id=chat_id,
-                text="Imagen omitida. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)"
+                text="Imagen omitida. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)",
+                message_thread_id=message.message_thread_id
             )
+            canal_datos[chat_id]["mensajes_a_eliminar"].append(enlace_msg.message_id)
+            
         # Verificar si es una URL de imgur sin http/https
-        elif "imgur.com" in text or "i.imgur.com" in text:
+        elif "imgur.com" in content_data or "i.imgur.com" in content_data:
             # Añadir https:// si falta
-            if not text.startswith("http"):
-                image_url = f"https://{text}"
+            if not content_data.startswith("http"):
+                image_url = f"https://{content_data}"
             else:
-                image_url = text
+                image_url = content_data
             
             canal_datos[chat_id]["imagen"] = image_url
             canal_estado[chat_id] = "ENLACE"
-            await context.bot.send_message(
+            
+            # Enviar mensaje y guardar su ID
+            enlace_msg = await context.bot.send_message(
                 chat_id=chat_id,
-                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)"
+                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)",
+                message_thread_id=message.message_thread_id
             )
+            canal_datos[chat_id]["mensajes_a_eliminar"].append(enlace_msg.message_id)
+            
         # Verificar si es una URL de imagen válida (incluyendo otras plataformas)
-        elif (text.startswith("http") and 
-              (text.endswith(".jpg") or text.endswith(".jpeg") or text.endswith(".png") or 
-               text.endswith(".webp") or text.endswith(".gif") or
-               "img" in text or "ibb.co" in text)):
+        elif (content_data.startswith("http") and 
+              (content_data.endswith(".jpg") or content_data.endswith(".jpeg") or content_data.endswith(".png") or 
+               content_data.endswith(".webp") or content_data.endswith(".gif") or
+               "img" in content_data or "ibb.co" in content_data)):
             # Guardar imagen y pedir enlace
-            canal_datos[chat_id]["imagen"] = text
+            canal_datos[chat_id]["imagen"] = content_data
             canal_estado[chat_id] = "ENLACE"
-            await context.bot.send_message(
+            
+            # Enviar mensaje y guardar su ID
+            enlace_msg = await context.bot.send_message(
                 chat_id=chat_id,
-                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)"
+                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)",
+                message_thread_id=message.message_thread_id
             )
+            canal_datos[chat_id]["mensajes_a_eliminar"].append(enlace_msg.message_id)
+            
         else:
             # Si no parece una URL de imagen, preguntar de nuevo
-            await context.bot.send_message(
+            error_msg = await context.bot.send_message(
                 chat_id=chat_id,
-                text="No parece una URL de imagen válida. Puedes enviar una URL de imgur (como i.imgur.com/ejemplo.jpg), escribir 'saltar' para omitir este paso, o 'cancelar' para detener todo el proceso:"
+                text="No parece una URL de imagen válida. Puedes enviar una URL de imgur (como i.imgur.com/ejemplo.jpg), escribir 'saltar' para omitir este paso, o 'cancelar' para detener todo el proceso:",
+                message_thread_id=message.message_thread_id
             )
+            canal_datos[chat_id]["mensajes_a_eliminar"].append(error_msg.message_id)
     
     elif estado == "ENLACE":
         # Procesar el enlace final
         try:
-            product_url = text
+            product_url = content_data
             datos = canal_datos.get(chat_id, {})
             title = datos.get("titulo", "")
             image_url = datos.get("imagen", "")
@@ -282,10 +411,12 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             # Obtener ID y generar enlaces
             item_id = extract_item_id(product_url)
             if not item_id:
-                await context.bot.send_message(
+                error_msg = await context.bot.send_message(
                     chat_id=chat_id,
-                    text="No se pudo extraer el ID del producto. Intenta con otro enlace."
+                    text="No se pudo extraer el ID del producto. Intenta con otro enlace.",
+                    message_thread_id=message.message_thread_id
                 )
+                canal_datos[chat_id]["mensajes_a_eliminar"].append(error_msg.message_id)
                 return
             
             links = generate_links(product_url, item_id)
@@ -295,6 +426,13 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
             message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
             message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
+            
+            # Eliminar todos los mensajes intermedios
+            for msg_id in canal_datos[chat_id].get("mensajes_a_eliminar", []):
+                try:
+                    await context.bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                except Exception as e:
+                    print(f"Error al eliminar mensaje {msg_id}: {e}")
             
             # Enviar respuesta final
             if image_url and image_url.startswith("http"):
@@ -311,21 +449,24 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
                         chat_id=chat_id,
                         photo=image_url,
                         caption=message_text,
-                        parse_mode='HTML'
+                        parse_mode='HTML',
+                        message_thread_id=message.message_thread_id
                     )
                     print("Imagen enviada con éxito")
                 except Exception as e:
                     print(f"Error al enviar imagen: {e}")
                     await context.bot.send_message(
                         chat_id=chat_id,
-                        text=f"No se pudo enviar la imagen. Enviando solo texto.\n\n{message_text}",
-                        parse_mode='HTML'
+                        text=message_text,
+                        parse_mode='HTML',
+                        message_thread_id=message.message_thread_id
                     )
             else:
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=message_text,
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    message_thread_id=message.message_thread_id
                 )
             
             # Crear información adicional para el monitor
@@ -341,10 +482,12 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             
         except Exception as e:
             print(f"Error en proceso de enlace: {e}")
-            await context.bot.send_message(
+            error_msg = await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"Error al procesar el enlace: {str(e)}"
+                text=f"Error al procesar el enlace: {str(e)}",
+                message_thread_id=message.message_thread_id
             )
+            # No eliminamos este mensaje de error
         
         # Limpiar estado y datos
         if chat_id in canal_estado:
@@ -354,15 +497,43 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
 
 async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
-    if not message or not message.text:
+    if not message:
         return
     
     chat_id = message.chat_id
     message_id = message.message_id
-    text = message.text.strip()
     thread_id = message.message_thread_id  # ID del hilo de discusión si existe
     
-    print(f"Mensaje recibido en grupo: {text}")
+    # Determinar el tipo de contenido
+    content_type = "desconocido"
+    content_data = None
+    
+    if message.text:
+        content_type = "texto"
+        content_data = message.text.strip()
+    elif message.photo:
+        content_type = "foto"
+        content_data = message.photo[-1].file_id
+    elif message.document:
+        content_type = "documento"
+        content_data = message.document.file_id
+    elif message.video:
+        content_type = "video"
+        content_data = message.video.file_id
+    elif message.audio:
+        content_type = "audio"
+        content_data = message.audio.file_id
+    elif message.voice:
+        content_type = "voz"
+        content_data = message.voice.file_id
+    elif message.sticker:
+        content_type = "sticker"
+        content_data = message.sticker.file_id
+    else:
+        # Otro tipo de contenido no manejado específicamente
+        return
+    
+    print(f"Mensaje recibido en grupo: tipo={content_type}")
     print(f"Chat ID: {chat_id}, Thread ID: {thread_id}")
     
     # Crear una clave única para cada chat+hilo
@@ -386,7 +557,7 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
     
     if estado == "TITULO":
         # Guardar título y pedir imagen
-        canal_datos[chat_key]["titulo"] = text
+        canal_datos[chat_key]["titulo"] = content_data
         canal_estado[chat_key] = "IMAGEN"
         
         # Enviar mensaje y guardar su ID
@@ -399,7 +570,7 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
     
     elif estado == "IMAGEN":
         # Verificar si quiere saltar la imagen
-        if text.lower() in ["saltar", "skip", "no", "ninguna"]:
+        if content_data.lower() in ["saltar", "skip", "no", "ninguna"]:
             canal_datos[chat_key]["imagen"] = ""
             canal_estado[chat_key] = "ENLACE"
             
@@ -412,12 +583,12 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
             canal_datos[chat_key]["mensajes_a_eliminar"].append(enlace_msg.message_id)
             
         # Verificar si es una URL de imgur sin http/https
-        elif "imgur.com" in text or "i.imgur.com" in text:
+        elif "imgur.com" in content_data or "i.imgur.com" in content_data:
             # Añadir https:// si falta
-            if not text.startswith("http"):
-                image_url = f"https://{text}"
+            if not content_data.startswith("http"):
+                image_url = f"https://{content_data}"
             else:
-                image_url = text
+                image_url = content_data
             
             canal_datos[chat_key]["imagen"] = image_url
             canal_estado[chat_key] = "ENLACE"
@@ -431,12 +602,12 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
             canal_datos[chat_key]["mensajes_a_eliminar"].append(enlace_msg.message_id)
             
         # Verificar si es una URL de imagen válida (incluyendo otras plataformas)
-        elif (text.startswith("http") and 
-              (text.endswith(".jpg") or text.endswith(".jpeg") or text.endswith(".png") or 
-               text.endswith(".webp") or text.endswith(".gif") or
-               "img" in text or "ibb.co" in text)):
+        elif (content_data.startswith("http") and 
+              (content_data.endswith(".jpg") or content_data.endswith(".jpeg") or content_data.endswith(".png") or 
+               content_data.endswith(".webp") or content_data.endswith(".gif") or
+               "img" in content_data or "ibb.co" in content_data)):
             # Guardar imagen y pedir enlace
-            canal_datos[chat_key]["imagen"] = text
+            canal_datos[chat_key]["imagen"] = content_data
             canal_estado[chat_key] = "ENLACE"
             
             # Enviar mensaje y guardar su ID
@@ -459,7 +630,7 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
     elif estado == "ENLACE":
         # Procesar el enlace final
         try:
-            product_url = text
+            product_url = content_data
             datos = canal_datos.get(chat_key, {})
             title = datos.get("titulo", "")
             image_url = datos.get("imagen", "")
@@ -629,21 +800,55 @@ async def cancelar_comando(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Simplificar la función de monitoreo
 async def monitor_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Envía al monitor solo el usuario y el mensaje"""
+    """Envía al monitor el usuario y el contenido del mensaje (texto o archivos)"""
     message = update.message or update.channel_post
-    if not message or not message.text:
+    if not message:
         return
     
     # Obtener información básica
     user = message.from_user
     user_name = f"{user.first_name} {user.last_name if user.last_name else ''}" if user else "Desconocido"
-    text = message.text
     
-    # Crear mensaje simple para el monitor
-    monitor_text = f"<b>{user_name}:</b> {text}"
+    # Crear mensaje base para el monitor
+    monitor_text = f"<b>{user_name}</b> envió:"
     
-    # Enviar al monitor
-    await forward_to_monitor(context, monitor_text)
+    # Verificar el tipo de contenido y procesarlo adecuadamente
+    if message.text:
+        # Mensaje de texto
+        monitor_text = f"<b>{user_name}:</b> {message.text}"
+        await forward_to_monitor(context, monitor_text)
+    elif message.photo:
+        # Mensaje con foto
+        caption = f" con descripción: {message.caption}" if message.caption else ""
+        monitor_text = f"<b>{user_name}:</b> envió una foto{caption}"
+        await forward_to_monitor(context, monitor_text, photo=message.photo[-1].file_id)
+    elif message.document:
+        # Mensaje con documento (PDF, etc.)
+        caption = f" con descripción: {message.caption}" if message.caption else ""
+        monitor_text = f"<b>{user_name}:</b> envió un documento ({message.document.file_name}){caption}"
+        await forward_to_monitor(context, monitor_text, document=message.document.file_id)
+    elif message.video:
+        # Mensaje con video
+        caption = f" con descripción: {message.caption}" if message.caption else ""
+        monitor_text = f"<b>{user_name}:</b> envió un video{caption}"
+        await forward_to_monitor(context, monitor_text, video=message.video.file_id)
+    elif message.audio:
+        # Mensaje con audio
+        caption = f" con descripción: {message.caption}" if message.caption else ""
+        monitor_text = f"<b>{user_name}:</b> envió un audio{caption}"
+        await forward_to_monitor(context, monitor_text, audio=message.audio.file_id)
+    elif message.voice:
+        # Mensaje de voz
+        monitor_text = f"<b>{user_name}:</b> envió un mensaje de voz"
+        await forward_to_monitor(context, monitor_text, voice=message.voice.file_id)
+    elif message.sticker:
+        # Sticker
+        monitor_text = f"<b>{user_name}:</b> envió un sticker"
+        await forward_to_monitor(context, monitor_text, sticker=message.sticker.file_id)
+    else:
+        # Otro tipo de contenido no manejado específicamente
+        monitor_text = f"<b>{user_name}:</b> envió un contenido no reconocido"
+        await forward_to_monitor(context, monitor_text)
     
     # Continuar con el procesamiento normal
     return False
@@ -655,7 +860,7 @@ def main():
         
         # Manejador para monitorear todos los mensajes (debe ir primero)
         application.add_handler(MessageHandler(
-            filters.TEXT & ~filters.COMMAND,
+            ~filters.COMMAND,  # Eliminar filtro de solo texto para capturar todo tipo de contenido
             monitor_all_messages
         ), group=0)  # Grupo 0 para que se ejecute primero
         
@@ -663,9 +868,9 @@ def main():
         application.add_handler(CommandHandler("iniciar", iniciar_comando, filters.ChatType.GROUP | filters.ChatType.SUPERGROUP))
         application.add_handler(CommandHandler("cancelar", cancelar_comando, filters.ChatType.GROUP | filters.ChatType.SUPERGROUP))
         
-        # Manejador para mensajes de texto en grupos
+        # Manejador para mensajes en grupos (cualquier tipo de contenido)
         application.add_handler(MessageHandler(
-            (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & filters.TEXT & ~filters.COMMAND,
+            (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & ~filters.COMMAND,
             process_group_message
         ), group=1)  # Grupo 1 para que se ejecute después del monitor
         
@@ -695,7 +900,7 @@ def main():
         ), group=0)
         
         logger.warning("Bot iniciado correctamente")
-        application.run_polling(allowed_updates=["message", "channel_post"])
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
     except Exception as e:
         logger.error(f"Error al iniciar el bot: {e}")
         sys.exit(1)
