@@ -44,7 +44,7 @@ async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: s
                 monitor_text = f"{message_text}\n\n<i>Info adicional:</i>\n{extra_info}"
             else:
                 monitor_text = message_text
-            
+                
             # Enviar el tipo de contenido apropiado
             if photo:
                 await context.bot.send_photo(
@@ -334,6 +334,23 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
         canal_datos[chat_id]["mensajes_a_eliminar"].append(img_msg.message_id)
     
     elif estado == "IMAGEN":
+        # Si es una foto enviada directamente
+        if message.photo:
+            # Usar el ID de la foto más grande (mejor calidad)
+            photo_id = message.photo[-1].file_id
+            canal_datos[chat_id]["imagen"] = photo_id
+            canal_datos[chat_id]["es_file_id"] = True  # Marcar que es un file_id y no una URL
+            canal_estado[chat_id] = "ENLACE"
+            
+            # Enviar mensaje y guardar su ID
+            enlace_msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)",
+                message_thread_id=message.message_thread_id
+            )
+            canal_datos[chat_id]["mensajes_a_eliminar"].append(enlace_msg.message_id)
+            return
+
         # Verificar si quiere saltar la imagen
         if content_data.lower() in ["saltar", "skip", "no", "ninguna"]:
             canal_datos[chat_id]["imagen"] = ""
@@ -435,24 +452,30 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
                     print(f"Error al eliminar mensaje {msg_id}: {e}")
             
             # Enviar respuesta final
-            if image_url and image_url.startswith("http"):
+            if image_url:
                 try:
-                    print(f"Intentando enviar imagen: {image_url}")
-                    # Asegurarse de que la URL de imgur esté en el formato correcto
-                    if "imgur.com" in image_url and not image_url.startswith("https://i."):
-                        # Convertir URLs como imgur.com/abc a i.imgur.com/abc.jpg
-                        image_id = image_url.split("/")[-1]
-                        image_url = f"https://i.imgur.com/{image_id}.jpg"
-                        print(f"URL de imgur reformateada: {image_url}")
+                    if canal_datos[chat_id].get("es_file_id", False):
+                        # Si es un file_id, usar send_photo directamente con el ID
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=image_url,  # aquí image_url es en realidad el file_id
+                            caption=message_text,
+                            parse_mode='HTML',
+                            message_thread_id=message.message_thread_id
+                        )
+                    else:
+                        # Si es una URL, usar el código existente
+                        if "imgur.com" in image_url and not image_url.startswith("https://i."):
+                            image_id = image_url.split("/")[-1]
+                            image_url = f"https://i.imgur.com/{image_id}.jpg"
                         
-                    await context.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=image_url,
-                        caption=message_text,
-                        parse_mode='HTML',
-                        message_thread_id=message.message_thread_id
-                    )
-                    print("Imagen enviada con éxito")
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=image_url,
+                            caption=message_text,
+                            parse_mode='HTML',
+                            message_thread_id=message.message_thread_id
+                        )
                 except Exception as e:
                     print(f"Error al enviar imagen: {e}")
                     await context.bot.send_message(
@@ -569,6 +592,23 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
         canal_datos[chat_key]["mensajes_a_eliminar"].append(img_msg.message_id)
     
     elif estado == "IMAGEN":
+        # Si es una foto enviada directamente
+        if message.photo:
+            # Usar el ID de la foto más grande (mejor calidad)
+            photo_id = message.photo[-1].file_id
+            canal_datos[chat_key]["imagen"] = photo_id
+            canal_datos[chat_key]["es_file_id"] = True  # Marcar que es un file_id y no una URL
+            canal_estado[chat_key] = "ENLACE"
+            
+            # Enviar mensaje y guardar su ID
+            enlace_msg = await context.bot.send_message(
+                chat_id=chat_id,
+                text="Imagen guardada. Por último, envía el enlace de Sugargoo o el enlace directo: (o escribe 'cancelar' para detener el proceso)",
+                message_thread_id=thread_id
+            )
+            canal_datos[chat_key]["mensajes_a_eliminar"].append(enlace_msg.message_id)
+            return
+
         # Verificar si quiere saltar la imagen
         if content_data.lower() in ["saltar", "skip", "no", "ninguna"]:
             canal_datos[chat_key]["imagen"] = ""
@@ -670,24 +710,30 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
                     print(f"Error al eliminar mensaje {msg_id}: {e}")
             
             # Enviar respuesta final
-            if image_url and image_url.startswith("http"):
+            if image_url:
                 try:
-                    print(f"Intentando enviar imagen: {image_url}")
-                    # Asegurarse de que la URL de imgur esté en el formato correcto
-                    if "imgur.com" in image_url and not image_url.startswith("https://i."):
-                        # Convertir URLs como imgur.com/abc a i.imgur.com/abc.jpg
-                        image_id = image_url.split("/")[-1]
-                        image_url = f"https://i.imgur.com/{image_id}.jpg"
-                        print(f"URL de imgur reformateada: {image_url}")
+                    if canal_datos[chat_key].get("es_file_id", False):
+                        # Si es un file_id, usar send_photo directamente con el ID
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=image_url,  # aquí image_url es en realidad el file_id
+                            caption=message_text,
+                            parse_mode='HTML',
+                            message_thread_id=thread_id
+                        )
+                    else:
+                        # Si es una URL, usar el código existente
+                        if "imgur.com" in image_url and not image_url.startswith("https://i."):
+                            image_id = image_url.split("/")[-1]
+                            image_url = f"https://i.imgur.com/{image_id}.jpg"
                         
-                    await context.bot.send_photo(
-                        chat_id=chat_id,
-                        photo=image_url,
-                        caption=message_text,
-                        parse_mode='HTML',
-                        message_thread_id=thread_id
-                    )
-                    print("Imagen enviada con éxito")
+                        await context.bot.send_photo(
+                            chat_id=chat_id,
+                            photo=image_url,
+                            caption=message_text,
+                            parse_mode='HTML',
+                            message_thread_id=thread_id
+                        )
                 except Exception as e:
                     print(f"Error al enviar imagen: {e}")
                     await context.bot.send_message(
@@ -848,7 +894,7 @@ async def monitor_all_messages(update: Update, context: ContextTypes.DEFAULT_TYP
     else:
         # Otro tipo de contenido no manejado específicamente
         monitor_text = f"<b>{user_name}:</b> envió un contenido no reconocido"
-        await forward_to_monitor(context, monitor_text)
+    await forward_to_monitor(context, monitor_text)
     
     # Continuar con el procesamiento normal
     return False
