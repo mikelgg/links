@@ -115,7 +115,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def recibir_titulo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.message.from_user.id
     datos_temporales[user_id] = {'titulo': update.message.text}
-    await update.message.reply_text("Título guardado. Ahora envíame el enlace de la imagen:")
+    await update.message.reply_text("Título guardado. Ahora envía la imagen o el enlace de la imagen: (o escribe 'cancelar' para detener el proceso)")
     return IMAGEN
 
 async def recibir_imagen(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -154,6 +154,8 @@ async def recibir_enlace(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
         message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
         message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
+        if 'findsly' in links:
+            message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
 
         # Enviar al usuario
         if image_url:
@@ -204,16 +206,25 @@ def generate_links(product_url, item_id):
 
     if "weidian.com" in product_url:
         channel = "weidian"
+        findsly_url = f"https://finds.ly/product/weidian/{item_id}"
     elif "taobao.com" in product_url:
         channel = "TAOBAO"
+        findsly_url = f"https://finds.ly/product/taobao/{item_id}"
     else:  # 1688.com
         channel = "1688"
+        findsly_url = None
 
-    return {
+    links = {
         'ootdbuy': f"https://www.ootdbuy.com/goods/details?id={item_id}&channel={channel}&inviteCode={OOTDBUY_INVITE}",
         'wemimi': f"https://www.wemimi.com/#/home/productDetail?productLink={double_encoded_url}&memberId={WEMIMI_ID}",
-        'sugargoo': f"https://www.sugargoo.com/#/home/productDetail?productLink={encoded_url}"
+        'sugargoo': f"https://www.sugargoo.com/#/home/productDetail?productLink={encoded_url}",
     }
+    
+    # Añadir el enlace de Finds.ly solo si está disponible
+    if findsly_url:
+        links['findsly'] = findsly_url
+
+    return links
 
 def extract_item_id(url):
     """Extraer el ID del producto de diferentes plataformas"""
@@ -330,7 +341,7 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
         # Enviar mensaje y guardar su ID
         img_msg = await context.bot.send_message(
             chat_id=chat_id,
-            text="Título guardado. Ahora envía el enlace de la imagen: (o escribe 'cancelar' para detener el proceso)",
+            text="Título guardado. Ahora envía la imagen o el enlace de la imagen: (o escribe 'cancelar' para detener el proceso)",
             message_thread_id=message.message_thread_id
         )
         canal_datos[chat_id]["mensajes_a_eliminar"].append(img_msg.message_id)
@@ -445,6 +456,8 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
             message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
             message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
+            if 'findsly' in links:
+                message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
             
             # Eliminar todos los mensajes intermedios
             for msg_id in canal_datos[chat_id].get("mensajes_a_eliminar", []):
@@ -588,7 +601,7 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
         # Enviar mensaje y guardar su ID
         img_msg = await context.bot.send_message(
             chat_id=chat_id,
-            text="Título guardado. Ahora envía el enlace de la imagen: (o escribe 'cancelar' para detener el proceso)",
+            text="Título guardado. Ahora envía la imagen o el enlace de la imagen: (o escribe 'cancelar' para detener el proceso)",
             message_thread_id=thread_id
         )
         canal_datos[chat_key]["mensajes_a_eliminar"].append(img_msg.message_id)
@@ -703,6 +716,8 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
             message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
             message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
+            if 'findsly' in links:
+                message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
             
             # Eliminar todos los mensajes intermedios
             for msg_id in canal_datos[chat_key].get("mensajes_a_eliminar", []):
