@@ -26,6 +26,7 @@ TOKEN = "7912304550:AAHvWRVO3j4lwOUcD7soyyGxv8bsFFUwUdY"
 MONITOR_GROUP_ID = "-1002429457610"
 OOTDBUY_INVITE = "K3YUN0O7N"
 WEMIMI_ID = "1700341715280059890"
+FISHGOO_ID = "2189734375162456157"
 
 # Estados para la conversación
 TITULO, IMAGEN, ENLACE = range(3)
@@ -152,7 +153,7 @@ async def recibir_enlace(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Preparar el mensaje con los enlaces en negrita y el emoji
         message_text = f"{title} 🔥\n"
         message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
-        message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
+        message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
         message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
         if 'findsly' in links:
             message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
@@ -216,7 +217,7 @@ def generate_links(product_url, item_id):
 
     links = {
         'ootdbuy': f"https://www.ootdbuy.com/goods/details?id={item_id}&channel={channel}&inviteCode={OOTDBUY_INVITE}",
-        'wemimi': f"https://www.wemimi.com/#/home/productDetail?productLink={double_encoded_url}&memberId={WEMIMI_ID}",
+        'fishgoo': f"https://www.fishgoo.com/#/home/productDetail?productLink={encoded_url}&memberId={FISHGOO_ID}",
         'sugargoo': f"https://www.sugargoo.com/#/home/productDetail?productLink={encoded_url}",
     }
     
@@ -454,7 +455,7 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             # Crear mensaje final
             message_text = f"{title} 🔥\n"
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
-            message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
+            message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
             message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
             if 'findsly' in links:
                 message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
@@ -714,7 +715,7 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
             # Crear mensaje final
             message_text = f"{title} 🔥\n"
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
-            message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
+            message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
             message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
             if 'findsly' in links:
                 message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
