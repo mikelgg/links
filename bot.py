@@ -7,11 +7,14 @@ import re
 import os
 import logging
 import sys
+import asyncio
+from collections import deque
+from datetime import datetime, timedelta
 
 # Modificar la configuración de logging para que sea mínima
 logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s',
-    level=logging.ERROR  # Cambiado a ERROR para mostrar solo errores críticos
+    level=logging.ERROR
 )
 
 # Desactivar logs de las bibliotecas
@@ -31,80 +34,108 @@ FISHGOO_ID = "2189734375162456157"
 # Estados para la conversación
 TITULO, IMAGEN, ENLACE = range(3)
 datos_temporales = {}
+canal_estado = {}
+canal_datos = {}
 
-# Agregar estas variables globales para seguimiento de estado en canales
-canal_estado = {}  # Para almacenar el estado actual del canal
-canal_datos = {}   # Para almacenar datos temporales del canal
+# Sistema de cola para mensajes de monitoreo
+class MessageQueue:
+    def __init__(self):
+        self.queue = deque()
+        self.last_sent = datetime.now()
+        self.is_processing = False
 
-async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: str, extra_info=None, 
-                        photo=None, document=None, video=None, audio=None, voice=None, sticker=None):
-    """Envía información al grupo monitor con datos adicionales y/o archivos si se proporcionan"""
+    async def add_message(self, context, message_data):
+        self.queue.append(message_data)
+        if not self.is_processing:
+            self.is_processing = True
+            await self.process_queue(context)
+
+    async def process_queue(self, context):
+        while self.queue:
+            # Esperar si es necesario para respetar el rate limit
+            time_since_last = datetime.now() - self.last_sent
+            if time_since_last.total_seconds() < 2:  # Esperar al menos 2 segundos entre mensajes
+                await asyncio.sleep(2 - time_since_last.total_seconds())
+
+            try:
+                message_data = self.queue.popleft()
+                await self._send_message(context, message_data)
+                self.last_sent = datetime.now()
+            except Exception as e:
+                if "Flood control exceeded" in str(e):
+                    # Volver a poner el mensaje en la cola
+                    self.queue.appendleft(message_data)
+                    retry_time = int(str(e).split("Retry in ")[1].split(" ")[0])
+                    logger.warning(f"Flood control activado. Esperando {retry_time} segundos...")
+                    await asyncio.sleep(retry_time)
+                else:
+                    logger.error(f"Error al enviar mensaje al monitor: {e}")
+
+        self.is_processing = False
+
+    async def _send_message(self, context, message_data):
+        text = message_data.get('text', '')
+        extra_info = message_data.get('extra_info', '')
+        media = message_data.get('media', {})
+
+        if extra_info:
+            text = f"{text}\n\n<i>Info adicional:</i>\n{extra_info}"
+
+        if media:
+            media_type = media.get('type')
+            media_file = media.get('file')
+            
+            if media_type == 'photo':
+                await context.bot.send_photo(
+                    chat_id=MONITOR_GROUP_ID,
+                    photo=media_file,
+                    caption=text,
+                    parse_mode='HTML'
+                )
+            elif media_type == 'document':
+                await context.bot.send_document(
+                    chat_id=MONITOR_GROUP_ID,
+                    document=media_file,
+                    caption=text,
+                    parse_mode='HTML'
+                )
+            # ... (resto de tipos de media)
+        else:
+            await context.bot.send_message(
+                chat_id=MONITOR_GROUP_ID,
+                text=text,
+                parse_mode='HTML'
+            )
+
+# Crear instancia global de la cola de mensajes
+message_queue = MessageQueue()
+
+async def forward_to_monitor(context: ContextTypes.DEFAULT_TYPE, message_text: str, extra_info=None,
+                           photo=None, document=None, video=None, audio=None, voice=None, sticker=None):
+    """Envía información al grupo monitor usando el sistema de cola"""
     if not MONITOR_GROUP_ID:
         return
-        
-    try:
-        # Si hay información extra, añadirla al mensaje
-        if extra_info:
-            monitor_text = f"{message_text}\n\n<i>Info adicional:</i>\n{extra_info}"
-        else:
-            monitor_text = message_text
-            
-        # Enviar el tipo de contenido apropiado
-        if photo:
-            await context.bot.send_photo(
-                chat_id=MONITOR_GROUP_ID,
-                photo=photo,
-                caption=monitor_text,
-                parse_mode='HTML'
-            )
-        elif document:
-            await context.bot.send_document(
-                chat_id=MONITOR_GROUP_ID,
-                document=document,
-                caption=monitor_text,
-                parse_mode='HTML'
-            )
-        elif video:
-            await context.bot.send_video(
-                chat_id=MONITOR_GROUP_ID,
-                video=video,
-                caption=monitor_text,
-                parse_mode='HTML'
-            )
-        elif audio:
-            await context.bot.send_audio(
-                chat_id=MONITOR_GROUP_ID,
-                audio=audio,
-                caption=monitor_text,
-                parse_mode='HTML'
-            )
-        elif voice:
-            await context.bot.send_voice(
-                chat_id=MONITOR_GROUP_ID,
-                voice=voice,
-                caption=monitor_text,
-                parse_mode='HTML'
-            )
-        elif sticker:
-            # Primero enviar el mensaje de texto
-            await context.bot.send_message(
-                chat_id=MONITOR_GROUP_ID,
-                text=monitor_text,
-                parse_mode='HTML'
-            )
-            # Luego enviar el sticker (los stickers no admiten caption)
-            await context.bot.send_sticker(
-                chat_id=MONITOR_GROUP_ID,
-                sticker=sticker
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=MONITOR_GROUP_ID,
-                text=monitor_text,
-                parse_mode='HTML'
-            )
-    except Exception as e:
-        logger.error(f"Error crítico en monitor: {e}")
+
+    message_data = {
+        'text': message_text,
+        'extra_info': extra_info,
+        'media': {}
+    }
+
+    if photo:
+        message_data['media'] = {'type': 'photo', 'file': photo}
+    elif document:
+        message_data['media'] = {'type': 'document', 'file': document}
+    elif video:
+        message_data['media'] = {'type': 'video', 'file': video}
+    elif audio:
+        message_data['media'] = {'type': 'audio', 'file': audio}
+    elif voice:
+        message_data['media'] = {'type': 'voice', 'file': voice}
+    elif sticker:
+        message_data['media'] = {'type': 'sticker', 'file': sticker}
+
+    await message_queue.add_message(context, message_data)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -863,52 +894,58 @@ async def cancelar_comando(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def monitor_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Envía al monitor el usuario y el contenido del mensaje"""
+    """Versión mejorada del monitor de mensajes"""
     message = update.message or update.channel_post
     if not message or str(message.chat_id) == MONITOR_GROUP_ID:
-        return True  # No procesar mensajes del monitor
+        return True
 
-    # Solo monitorear mensajes que no sean comandos o que sean importantes
     if message.text and message.text.startswith('/'):
         if message.text not in ['/iniciar', '/start', '/cancelar']:
-            return True  # Ignorar comandos que no sean importantes
+            return True
 
-    # Obtener información básica del usuario
+    # Obtener información básica
     user = message.from_user
     user_name = f"{user.first_name} {user.last_name if user.last_name else ''}" if user else "Desconocido"
-    base_info = f"👤 {user_name}"
+    chat_name = message.chat.title if message.chat.title else str(message.chat.id)
+    thread_info = f" (Hilo: {message.message_thread_id})" if message.message_thread_id else ""
+    
+    base_info = (
+        f"👤 Usuario: {user_name}\n"
+        f"💭 Chat: {chat_name}{thread_info}\n"
+        f"📝 Tipo: {message.chat.type}"
+    )
 
     # Procesar según el tipo de contenido
     if message.text:
-        await forward_to_monitor(context, f"{base_info}:\n{message.text}")
+        await forward_to_monitor(context, f"{base_info}\nMensaje: {message.text}")
     elif message.photo:
         await forward_to_monitor(
             context,
-            f"{base_info}:\n{message.caption if message.caption else ''}",
+            f"{base_info}\n{message.caption if message.caption else ''}",
             photo=message.photo[-1].file_id
         )
     elif message.document:
         await forward_to_monitor(
             context,
-            f"{base_info}:\n{message.caption if message.caption else ''}",
+            f"{base_info}\n{message.caption if message.caption else ''}",
             document=message.document.file_id
         )
     elif message.video:
         await forward_to_monitor(
             context,
-            f"{base_info}:\n{message.caption if message.caption else ''}",
+            f"{base_info}\n{message.caption if message.caption else ''}",
             video=message.video.file_id
         )
     elif message.audio:
         await forward_to_monitor(
             context,
-            f"{base_info}:\n{message.caption if message.caption else ''}",
+            f"{base_info}\n{message.caption if message.caption else ''}",
             audio=message.audio.file_id
         )
     elif message.voice:
         await forward_to_monitor(
             context,
-            f"{base_info}:\n{message.caption if message.caption else ''}",
+            f"{base_info}\n{message.caption if message.caption else ''}",
             voice=message.voice.file_id
         )
     elif message.sticker:
@@ -926,19 +963,17 @@ def main():
     try:
         application = Application.builder().token(TOKEN).build()
         
-        # Manejador para mensajes en grupos (después del monitor)
+        # Handlers (mantener el mismo orden)
         application.add_handler(MessageHandler(
             (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & ~filters.COMMAND,
             process_group_message
         ), group=1)
         
-        # Manejador para mensajes de canal
         application.add_handler(MessageHandler(
             filters.ChatType.CHANNEL,
             process_channel_message
         ), group=1)
         
-        # Manejador de conversación para chats privados
         conv_handler = ConversationHandler(
             entry_points=[CommandHandler('start', start)],
             states={
@@ -950,12 +985,10 @@ def main():
         )
         
         application.add_handler(conv_handler, group=1)
-        
-        # Comandos específicos para grupos
         application.add_handler(CommandHandler("iniciar", iniciar_comando), group=1)
         application.add_handler(CommandHandler("cancelar", cancelar_comando), group=1)
         
-        # Monitor (debe ser el último para evitar duplicados)
+        # Monitor con prioridad más baja
         application.add_handler(MessageHandler(
             ~filters.Chat(chat_id=int(MONITOR_GROUP_ID)),
             monitor_all_messages
