@@ -894,7 +894,7 @@ async def cancelar_comando(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 async def monitor_all_messages(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Versión mejorada del monitor de mensajes"""
+    """Versión simplificada del monitor de mensajes"""
     message = update.message or update.channel_post
     if not message or str(message.chat_id) == MONITOR_GROUP_ID:
         return True
@@ -903,59 +903,53 @@ async def monitor_all_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         if message.text not in ['/iniciar', '/start', '/cancelar']:
             return True
 
-    # Obtener información básica
+    # Obtener solo el nombre del usuario
     user = message.from_user
     user_name = f"{user.first_name} {user.last_name if user.last_name else ''}" if user else "Desconocido"
-    chat_name = message.chat.title if message.chat.title else str(message.chat.id)
-    thread_info = f" (Hilo: {message.message_thread_id})" if message.message_thread_id else ""
     
-    base_info = (
-        f"👤 Usuario: {user_name}\n"
-        f"💭 Chat: {chat_name}{thread_info}\n"
-        f"📝 Tipo: {message.chat.type}"
-    )
+    base_info = f"👤 {user_name}"
 
     # Procesar según el tipo de contenido
     if message.text:
-        await forward_to_monitor(context, f"{base_info}\nMensaje: {message.text}")
+        await forward_to_monitor(context, f"{base_info}: {message.text}")
     elif message.photo:
         await forward_to_monitor(
             context,
-            f"{base_info}\n{message.caption if message.caption else ''}",
+            f"{base_info}: {message.caption if message.caption else '[Foto]'}",
             photo=message.photo[-1].file_id
         )
     elif message.document:
         await forward_to_monitor(
             context,
-            f"{base_info}\n{message.caption if message.caption else ''}",
+            f"{base_info}: {message.caption if message.caption else '[Documento]'}",
             document=message.document.file_id
         )
     elif message.video:
         await forward_to_monitor(
             context,
-            f"{base_info}\n{message.caption if message.caption else ''}",
+            f"{base_info}: {message.caption if message.caption else '[Video]'}",
             video=message.video.file_id
         )
     elif message.audio:
         await forward_to_monitor(
             context,
-            f"{base_info}\n{message.caption if message.caption else ''}",
+            f"{base_info}: {message.caption if message.caption else '[Audio]'}",
             audio=message.audio.file_id
         )
     elif message.voice:
         await forward_to_monitor(
             context,
-            f"{base_info}\n{message.caption if message.caption else ''}",
+            f"{base_info}: {message.caption if message.caption else '[Nota de voz]'}",
             voice=message.voice.file_id
         )
     elif message.sticker:
         await forward_to_monitor(
             context,
-            f"{base_info} envió un sticker",
+            f"{base_info}: [Sticker]",
             sticker=message.sticker.file_id
         )
     else:
-        await forward_to_monitor(context, f"{base_info} envió contenido no reconocido")
+        await forward_to_monitor(context, f"{base_info}: [Contenido no reconocido]")
 
     return True
 
