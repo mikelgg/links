@@ -186,7 +186,8 @@ async def recibir_enlace(update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
         message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
         message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b> | "
-        message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
+        message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b>\n\n"
+        message_text += f"QC:\n"
         message_text += f"<b><a href='{links['finderqc']}'>FINDERQC</a></b> | "
         message_text += f"<b><a href='{links['doppel']}'>DOPPEL</a></b>"
 
@@ -239,15 +240,15 @@ def generate_links(product_url, item_id):
 
     if "weidian.com" in product_url:
         channel = "weidian"
-        finderqc_url = f"https://finderqc.com/product/weidian/{item_id}"
+        finderqc_url = f"https://finderqc.com/search?q={product_url}"
         doppel_url = f"https://doppel.fit/item/WEIDIAN/{item_id}"
     elif "taobao.com" in product_url:
         channel = "TAOBAO"
-        finderqc_url = f"https://finderqc.com/product/Taobao/{item_id}"
+        finderqc_url = f"https://finderqc.com/search?q={product_url}"
         doppel_url = f"https://doppel.fit/item/taobao/{item_id}"
     else:  # 1688.com
         channel = "1688"
-        finderqc_url = f"https://finderqc.com/product/Ali1688/{item_id}"
+        finderqc_url = f"https://finderqc.com/search?q={product_url}"
         doppel_url = f"https://doppel.fit/item/1688/{item_id}"
 
     links = {
@@ -491,7 +492,8 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
             message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
             message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b> | "
-            message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
+            message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b>\n\n"
+            message_text += f"QC:\n"
             message_text += f"<b><a href='{links['finderqc']}'>FINDERQC</a></b> | "
             message_text += f"<b><a href='{links['doppel']}'>DOPPEL</a></b>"
             
@@ -752,7 +754,8 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
             message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
             message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b> | "
-            message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
+            message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b>\n\n"
+            message_text += f"QC:\n"
             message_text += f"<b><a href='{links['finderqc']}'>FINDERQC</a></b> | "
             message_text += f"<b><a href='{links['doppel']}'>DOPPEL</a></b>"
             
