@@ -29,7 +29,6 @@ TOKEN = "7912304550:AAHvWRVO3j4lwOUcD7soyyGxv8bsFFUwUdY"
 MONITOR_GROUP_ID = "-1002429457610"
 OOTDBUY_INVITE = "K3YUN0O7N"
 WEMIMI_ID = "1700341715280059890"
-FISHGOO_ID = "2189734375162456157"
 
 # Estados para la conversación
 TITULO, IMAGEN, ENLACE = range(3)
@@ -184,10 +183,9 @@ async def recibir_enlace(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Preparar el mensaje con los enlaces en negrita y el emoji
         message_text = f"{title} 🔥\n"
         message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
-        message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
-        message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
-        if 'findsly' in links:
-            message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
+        message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
+        message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b> | "
+        message_text += f"<b><a href='{links['finderqc']}'>FINDERQC</a></b>"
 
         # Enviar al usuario
         if image_url:
@@ -238,23 +236,20 @@ def generate_links(product_url, item_id):
 
     if "weidian.com" in product_url:
         channel = "weidian"
-        findsly_url = f"https://finds.ly/product/weidian/{item_id}"
+        finderqc_url = f"https://finderqc.com/product/weidian/{item_id}"
     elif "taobao.com" in product_url:
         channel = "TAOBAO"
-        findsly_url = f"https://finds.ly/product/taobao/{item_id}"
+        finderqc_url = f"https://finderqc.com/product/Taobao/{item_id}"
     else:  # 1688.com
         channel = "1688"
-        findsly_url = None
+        finderqc_url = f"https://finderqc.com/product/Ali1688/{item_id}"
 
     links = {
         'ootdbuy': f"https://www.ootdbuy.com/goods/details?id={item_id}&channel={channel}&inviteCode={OOTDBUY_INVITE}",
-        'fishgoo': f"https://www.fishgoo.com/#/home/productDetail?productLink={encoded_url}&memberId={FISHGOO_ID}",
+        'wemimi': f"https://www.wemimi.com/#/home/productDetail?productLink={double_encoded_url}&memberId={WEMIMI_ID}",
         'sugargoo': f"https://www.sugargoo.com/#/home/productDetail?productLink={encoded_url}",
+        'finderqc': finderqc_url
     }
-    
-    # Añadir el enlace de Finds.ly solo si está disponible
-    if findsly_url:
-        links['findsly'] = findsly_url
 
     return links
 
@@ -486,10 +481,9 @@ async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_
             # Crear mensaje final
             message_text = f"{title} 🔥\n"
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
-            message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
-            message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
-            if 'findsly' in links:
-                message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
+            message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
+            message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b> | "
+            message_text += f"<b><a href='{links['finderqc']}'>FINDERQC</a></b>"
             
             # Eliminar todos los mensajes intermedios
             for msg_id in canal_datos[chat_id].get("mensajes_a_eliminar", []):
@@ -746,10 +740,9 @@ async def process_group_message(update: Update, context: ContextTypes.DEFAULT_TY
             # Crear mensaje final
             message_text = f"{title} 🔥\n"
             message_text += f"<b><a href='{links['ootdbuy']}'>OOTDBUY</a></b> | "
-            message_text += f"<b><a href='{links['fishgoo']}'>FISHGOO</a></b> | "
-            message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b>"
-            if 'findsly' in links:
-                message_text += f" | <b><a href='{links['findsly']}'>FINDS.LY</a></b>"
+            message_text += f"<b><a href='{links['wemimi']}'>WEMIMI</a></b> | "
+            message_text += f"<b><a href='{links['sugargoo']}'>SUGARGOO</a></b> | "
+            message_text += f"<b><a href='{links['finderqc']}'>FINDERQC</a></b>"
             
             # Eliminar todos los mensajes intermedios
             for msg_id in canal_datos[chat_key].get("mensajes_a_eliminar", []):
