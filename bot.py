@@ -316,6 +316,25 @@ async def send_startup_message(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(f"Error al enviar mensaje de inicio: {e}")
 
+async def send_startup_message_direct(bot):
+    """Envía un mensaje de inicio directamente sin JobQueue"""
+    try:
+        startup_message = f"🚀 <b>Bot Iniciado</b>\n\n"
+        startup_message += f"✅ El bot se ha puesto en marcha correctamente\n"
+        startup_message += f"🕐 <b>Hora de inicio:</b> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n"
+        startup_message += f"🔄 <b>Estado:</b> Activo y listo para procesar mensajes\n\n"
+        startup_message += f"📋 <i>Todas las funcionalidades están operativas</i>\n"
+        startup_message += f"⚠️ <i>Nota: Tareas programadas no disponibles</i>"
+        
+        await bot.send_message(
+            chat_id=MONITOR_GROUP_ID,
+            text=startup_message,
+            parse_mode='HTML'
+        )
+        print("✅ Mensaje de inicio enviado correctamente")
+    except Exception as e:
+        print(f"❌ Error al enviar mensaje de inicio: {e}")
+
 async def send_groups_report(context: ContextTypes.DEFAULT_TYPE):
     """Envía el reporte de grupos cada 2 días a las 2 PM"""
     try:
@@ -1021,33 +1040,49 @@ async def monitor_all_messages(update: Update, context: ContextTypes.DEFAULT_TYP
 
 def main():
     try:
+        # Crear la aplicación con job queue habilitado
         application = Application.builder().token(TOKEN).build()
         
-        # Obtener el job queue
+        # Verificar que el job queue esté disponible
         job_queue = application.job_queue
-        
-        # Programar mensaje de inicio (se ejecuta una vez al iniciar)
-        job_queue.run_once(send_startup_message, when=1)
-        
-        # Programar reporte de grupos cada 2 días a las 2 PM
-        # Usar timezone de España (puedes cambiar según tu zona horaria)
-        spain_tz = pytz.timezone('Europe/Madrid')
-        
-        # Calcular el próximo momento para las 2 PM
-        now = datetime.now(spain_tz)
-        next_2pm = now.replace(hour=14, minute=0, second=0, microsecond=0)
-        
-        # Si ya pasaron las 2 PM de hoy, programar para mañana
-        if now.hour >= 14:
-            next_2pm += timedelta(days=1)
-        
-        # Programar para que se ejecute cada 2 días a las 2 PM
-        job_queue.run_repeating(
-            send_groups_report,
-            interval=timedelta(days=2),
-            first=next_2pm,
-            name='groups_report_every_2_days'
-        )
+        if job_queue is None:
+            logger.error("JobQueue no está disponible")
+            # Continuar sin las funciones programadas
+            print("⚠️ Advertencia: Las tareas programadas no estarán disponibles")
+            print("🚀 Bot iniciando...")
+            
+            # Crear un handler especial para enviar el mensaje de inicio
+            async def post_init(application):
+                await send_startup_message_direct(application.bot)
+            
+            application.post_init = post_init
+            
+        else:
+            # Programar mensaje de inicio (se ejecuta una vez al iniciar)
+            job_queue.run_once(send_startup_message, when=1)
+            
+            # Programar reporte de grupos cada 2 días a las 2 PM
+            # Usar timezone de España (puedes cambiar según tu zona horaria)
+            spain_tz = pytz.timezone('Europe/Madrid')
+            
+            # Calcular el próximo momento para las 2 PM
+            now = datetime.now(spain_tz)
+            next_2pm = now.replace(hour=14, minute=0, second=0, microsecond=0)
+            
+            # Si ya pasaron las 2 PM de hoy, programar para mañana
+            if now.hour >= 14:
+                next_2pm += timedelta(days=1)
+            
+            # Programar para que se ejecute cada 2 días a las 2 PM
+            job_queue.run_repeating(
+                send_groups_report,
+                interval=timedelta(days=2),
+                first=next_2pm,
+                name='groups_report_every_2_days'
+            )
+            
+            print("🚀 Bot iniciando...")
+            print("📅 Reporte de grupos programado cada 2 días a las 2:00 PM")
         
         # Handlers (mantener el mismo orden)
         application.add_handler(MessageHandler(
