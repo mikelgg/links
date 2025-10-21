@@ -1,6 +1,6 @@
 # type: ignore
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler, JobQueue
 import requests
 from bs4 import BeautifulSoup
 import re
@@ -9,7 +9,8 @@ import logging
 import sys
 import asyncio
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
+import pytz
 
 # Modificar la configuración de logging para que sea mínima
 logging.basicConfig(
@@ -275,6 +276,63 @@ def extract_item_id(url):
 
     match = re.search(pattern, url)
     return match.group(1) if match else None
+
+async def get_bot_groups(context: ContextTypes.DEFAULT_TYPE):
+    """Obtiene la lista de grupos donde está añadido el bot"""
+    try:
+        # Obtener información sobre el bot
+        bot_info = await context.bot.get_me()
+        
+        # Crear mensaje con información de los grupos
+        # Nota: La API de Telegram no permite obtener directamente la lista de chats
+        # donde está el bot, por lo que mostraremos información general
+        message = f"🤖 <b>Estado del Bot</b>\n\n"
+        message += f"📊 <b>Bot:</b> @{bot_info.username}\n"
+        message += f"🆔 <b>ID:</b> {bot_info.id}\n"
+        message += f"📅 <b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n\n"
+        message += f"ℹ️ <i>El bot está activo y monitoreando todos los grupos donde ha sido añadido.</i>\n"
+        message += f"📈 <i>Todos los mensajes son procesados y reenviados al grupo monitor.</i>"
+        
+        return message
+    except Exception as e:
+        logger.error(f"Error al obtener información del bot: {e}")
+        return f"❌ Error al obtener información del bot: {str(e)}"
+
+async def send_startup_message(context: ContextTypes.DEFAULT_TYPE):
+    """Envía un mensaje cuando el bot se inicia"""
+    try:
+        startup_message = f"🚀 <b>Bot Iniciado</b>\n\n"
+        startup_message += f"✅ El bot se ha puesto en marcha correctamente\n"
+        startup_message += f"🕐 <b>Hora de inicio:</b> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n"
+        startup_message += f"🔄 <b>Estado:</b> Activo y listo para procesar mensajes\n\n"
+        startup_message += f"📋 <i>Todas las funcionalidades están operativas</i>"
+        
+        await context.bot.send_message(
+            chat_id=MONITOR_GROUP_ID,
+            text=startup_message,
+            parse_mode='HTML'
+        )
+        logger.info("Mensaje de inicio enviado correctamente")
+    except Exception as e:
+        logger.error(f"Error al enviar mensaje de inicio: {e}")
+
+async def send_groups_report(context: ContextTypes.DEFAULT_TYPE):
+    """Envía el reporte de grupos cada 2 días a las 2 PM"""
+    try:
+        groups_info = await get_bot_groups(context)
+        
+        report_message = f"📊 <b>Reporte Automático de Grupos</b>\n\n"
+        report_message += groups_info
+        report_message += f"\n\n🔄 <i>Próximo reporte en 2 días</i>"
+        
+        await context.bot.send_message(
+            chat_id=MONITOR_GROUP_ID,
+            text=report_message,
+            parse_mode='HTML'
+        )
+        logger.info("Reporte de grupos enviado correctamente")
+    except Exception as e:
+        logger.error(f"Error al enviar reporte de grupos: {e}")
 
 async def process_channel_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.channel_post
@@ -965,6 +1023,32 @@ def main():
     try:
         application = Application.builder().token(TOKEN).build()
         
+        # Obtener el job queue
+        job_queue = application.job_queue
+        
+        # Programar mensaje de inicio (se ejecuta una vez al iniciar)
+        job_queue.run_once(send_startup_message, when=1)
+        
+        # Programar reporte de grupos cada 2 días a las 2 PM
+        # Usar timezone de España (puedes cambiar según tu zona horaria)
+        spain_tz = pytz.timezone('Europe/Madrid')
+        
+        # Calcular el próximo momento para las 2 PM
+        now = datetime.now(spain_tz)
+        next_2pm = now.replace(hour=14, minute=0, second=0, microsecond=0)
+        
+        # Si ya pasaron las 2 PM de hoy, programar para mañana
+        if now.hour >= 14:
+            next_2pm += timedelta(days=1)
+        
+        # Programar para que se ejecute cada 2 días a las 2 PM
+        job_queue.run_repeating(
+            send_groups_report,
+            interval=timedelta(days=2),
+            first=next_2pm,
+            name='groups_report_every_2_days'
+        )
+        
         # Handlers (mantener el mismo orden)
         application.add_handler(MessageHandler(
             (filters.ChatType.GROUP | filters.ChatType.SUPERGROUP) & ~filters.COMMAND,
@@ -995,6 +1079,9 @@ def main():
             ~filters.Chat(chat_id=int(MONITOR_GROUP_ID)),
             monitor_all_messages
         ), group=2)
+        
+        print("🚀 Bot iniciando...")
+        print("📅 Reporte de grupos programado cada 2 días a las 2:00 PM")
         
         application.run_polling(allowed_updates=Update.ALL_TYPES)
     except Exception as e:
