@@ -38,6 +38,9 @@ datos_temporales = {}
 canal_estado = {}
 canal_datos = {}
 
+# Registro de grupos activos
+grupos_activos = {}
+
 # Sistema de cola para mensajes de monitoreo
 class MessageQueue:
     def __init__(self):
@@ -277,6 +280,31 @@ def extract_item_id(url):
     match = re.search(pattern, url)
     return match.group(1) if match else None
 
+def registrar_grupo(chat_id, chat_title, chat_type, user_name=None):
+    """Registra un grupo en el sistema de seguimiento"""
+    grupos_activos[chat_id] = {
+        'title': chat_title,
+        'type': chat_type,
+        'last_activity': datetime.now(),
+        'last_user': user_name,
+        'is_admin': None  # Se actualizará cuando se verifique
+    }
+
+async def verificar_admin_status(context: ContextTypes.DEFAULT_TYPE, chat_id):
+    """Verifica si el bot es administrador en un grupo específico"""
+    try:
+        bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
+        is_admin = bot_member.status in ['administrator', 'creator']
+        
+        # Actualizar el estado en el registro
+        if chat_id in grupos_activos:
+            grupos_activos[chat_id]['is_admin'] = is_admin
+            
+        return is_admin
+    except Exception as e:
+        logger.error(f"Error al verificar estado de admin en {chat_id}: {e}")
+        return False
+
 async def get_bot_groups(context: ContextTypes.DEFAULT_TYPE):
     """Obtiene la lista de grupos donde está añadido el bot"""
     try:
@@ -284,14 +312,55 @@ async def get_bot_groups(context: ContextTypes.DEFAULT_TYPE):
         bot_info = await context.bot.get_me()
         
         # Crear mensaje con información de los grupos
-        # Nota: La API de Telegram no permite obtener directamente la lista de chats
-        # donde está el bot, por lo que mostraremos información general
         message = f"🤖 <b>Estado del Bot</b>\n\n"
         message += f"📊 <b>Bot:</b> @{bot_info.username}\n"
         message += f"🆔 <b>ID:</b> {bot_info.id}\n"
         message += f"📅 <b>Fecha:</b> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n\n"
-        message += f"ℹ️ <i>El bot está activo y monitoreando todos los grupos donde ha sido añadido.</i>\n"
-        message += f"📈 <i>Todos los mensajes son procesados y reenviados al grupo monitor.</i>"
+        
+        # Mostrar grupos registrados
+        message += f"📋 <b>Grupos Activos ({len(grupos_activos)}):</b>\n"
+        
+        if grupos_activos:
+            admin_count = 0
+            for chat_id, info in grupos_activos.items():
+                # Verificar estado de administrador
+                is_admin = await verificar_admin_status(context, chat_id)
+                if is_admin:
+                    admin_count += 1
+                
+                # Determinar el emoji según el tipo y estado de admin
+                if info['type'] in ['group', 'supergroup']:
+                    emoji = "👥🔧" if is_admin else "👥"
+                else:
+                    emoji = "📢🔧" if is_admin else "📢"
+                
+                # Formatear el título (limitar longitud)
+                title = info['title'] if info['title'] else f"Chat {chat_id}"
+                if len(title) > 30:
+                    title = title[:27] + "..."
+                
+                # Calcular tiempo desde la última actividad
+                time_diff = datetime.now() - info['last_activity']
+                if time_diff.days > 0:
+                    last_activity = f"{time_diff.days}d"
+                elif time_diff.seconds > 3600:
+                    last_activity = f"{time_diff.seconds//3600}h"
+                else:
+                    last_activity = f"{time_diff.seconds//60}m"
+                
+                # Mostrar estado de admin
+                admin_status = "✅ Admin" if is_admin else "❌ No Admin"
+                
+                message += f"{emoji} <b>{title}</b>\n"
+                message += f"   └ ID: <code>{chat_id}</code> | {admin_status} | Actividad: {last_activity}\n"
+            
+            # Añadir resumen de administración
+            message += f"\n📊 <b>Resumen:</b> {admin_count}/{len(grupos_activos)} grupos como admin"
+        else:
+            message += f"• No se han detectado grupos activos aún\n"
+            message += f"• El bot registrará grupos cuando reciba mensajes de ellos\n"
+        
+        message += f"\n🔄 <i>El bot está monitoreando activamente todos los grupos</i>"
         
         return message
     except Exception as e:
@@ -301,11 +370,16 @@ async def get_bot_groups(context: ContextTypes.DEFAULT_TYPE):
 async def send_startup_message(context: ContextTypes.DEFAULT_TYPE):
     """Envía un mensaje cuando el bot se inicia"""
     try:
+        # Obtener información de grupos
+        groups_info = await get_bot_groups(context)
+        
         startup_message = f"🚀 <b>Bot Iniciado</b>\n\n"
         startup_message += f"✅ El bot se ha puesto en marcha correctamente\n"
         startup_message += f"🕐 <b>Hora de inicio:</b> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n"
         startup_message += f"🔄 <b>Estado:</b> Activo y listo para procesar mensajes\n\n"
-        startup_message += f"📋 <i>Todas las funcionalidades están operativas</i>"
+        startup_message += f"📋 <i>Todas las funcionalidades están operativas</i>\n\n"
+        startup_message += f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        startup_message += groups_info
         
         await context.bot.send_message(
             chat_id=MONITOR_GROUP_ID,
@@ -324,7 +398,23 @@ async def send_startup_message_direct(bot):
         startup_message += f"🕐 <b>Hora de inicio:</b> {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}\n"
         startup_message += f"🔄 <b>Estado:</b> Activo y listo para procesar mensajes\n\n"
         startup_message += f"📋 <i>Todas las funcionalidades están operativas</i>\n"
-        startup_message += f"⚠️ <i>Nota: Tareas programadas no disponibles</i>"
+        startup_message += f"⚠️ <i>Nota: Tareas programadas no disponibles</i>\n\n"
+        
+        # Mostrar grupos registrados
+        startup_message += f"📋 <b>Grupos Activos ({len(grupos_activos)}):</b>\n"
+        if grupos_activos:
+            for chat_id, info in grupos_activos.items():
+                # Para el mensaje directo, no verificamos admin status para evitar errores
+                emoji = "👥" if info['type'] in ['group', 'supergroup'] else "📢"
+                title = info['title'] if info['title'] else f"Chat {chat_id}"
+                if len(title) > 30:
+                    title = title[:27] + "..."
+                startup_message += f"{emoji} <b>{title}</b> (<code>{chat_id}</code>)\n"
+        else:
+            startup_message += f"• No se han detectado grupos activos aún\n"
+            startup_message += f"• El bot registrará grupos cuando reciba mensajes de ellos\n"
+        
+        startup_message += f"\n🔄 <i>El bot está monitoreando activamente todos los grupos</i>"
         
         await bot.send_message(
             chat_id=MONITOR_GROUP_ID,
@@ -988,9 +1078,17 @@ async def monitor_all_messages(update: Update, context: ContextTypes.DEFAULT_TYP
         if message.text not in ['/iniciar', '/start', '/cancelar']:
             return True
 
+    # Registrar el grupo/canal en el sistema de seguimiento
+    chat_id = message.chat_id
+    chat_title = message.chat.title if message.chat.title else f"Chat {chat_id}"
+    chat_type = message.chat.type
+    
     # Obtener solo el nombre del usuario
     user = message.from_user
     user_name = f"{user.first_name} {user.last_name if user.last_name else ''}" if user else "Desconocido"
+    
+    # Registrar el grupo
+    registrar_grupo(chat_id, chat_title, chat_type, user_name)
     
     base_info = f"👤 {user_name}"
 
